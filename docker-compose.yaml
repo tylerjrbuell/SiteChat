@@ -1,0 +1,67 @@
+version: '3.8'
+services:
+  web:
+    env_file:
+      - ./.env
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: ./docker/chat-interface/Dockerfile
+    entrypoint: /app/entrypoint.sh
+    volumes:
+      - ./docker/chat-interface/entrypoint.sh:/app/entrypoint.sh
+      - ./src/chat-interface:/app
+    ports:
+      - 9000:9000
+  api:
+    restart: always
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    command: bash ./bin/wait.sh chromadb:8000 -t 0 -- bun run --hot ./src/server.ts
+    depends_on:
+      - ollama-api
+    env_file:
+      - ./.env
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./bin/:/app/bin
+    ports:
+      - ${DOCKER_PORT:-3000}:3000
+  ollama-api:
+    restart: always
+    image: ollama/ollama:latest
+    entrypoint: /app/entrypoint.sh
+    volumes:
+      - ./docker/ollama/entrypoint.sh:/app/entrypoint.sh
+      - ./docker/ollama/modelFiles:/app/modelFiles
+      - ollamaData:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  chromadb:
+    build:
+      context: .
+      dockerfile: ./docker/chroma/Dockerfile
+    volumes:
+      - chromaDB:/chroma
+  site-sync:
+    build:
+      context: .
+      dockerfile: ./docker/site-sync/Dockerfile
+    volumes:
+      - ./src/site-sync:/app
+      - ./data:/app/data
+    env_file:
+      - ./.env
+    command: bun run ./index.ts
+
+volumes:
+  ollamaData:
+  chromaDB:
