@@ -51,16 +51,6 @@ services:
       dockerfile: ./docker/chroma/Dockerfile
     volumes:
       - chromaDB:/chroma
-  site-sync:
-    build:
-      context: .
-      dockerfile: ./docker/site-sync/Dockerfile
-    volumes:
-      - ./src/site-sync:/app
-      - ./data:/app/data
-    env_file:
-      - ./.env
-    command: bun run ./index.ts
 
 volumes:
   ollamaData:

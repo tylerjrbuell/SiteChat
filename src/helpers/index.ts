@@ -1,5 +1,7 @@
 import { Chroma } from 'langchain/vectorstores/chroma'
 import { Document } from 'langchain/document'
+import { Ollama } from 'langchain/llms/ollama'
+import { getOllamaClient } from '../ollama'
 
 const webClients: any = {}
 
@@ -61,23 +63,15 @@ async function getRelevantDocuments(
  */
 function getRelevantTopics(relevantFiles: Document[]) {
   const relevantTopics = relevantFiles.map(
-    (f) => f.pageContent.split('-')[1].split('.')[0]
+    (f) => f.pageContent.split('-')?.[1]?.split('.')?.[0] || f.pageContent
   )
   return relevantTopics
 }
 
-const wakeUpOllama = async () => {
-  const res = await fetch('http://ollama-api:11434/api/embeddings', {
-    method: 'POST',
-    body: JSON.stringify({
-      model: 'llama2',
-      prompt: 'wake up ollama',
-    }),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  })
-  return await res.status
+const warmUpModel = async (model: string) => {
+  const ollama = getOllamaClient(model)
+  const res = await ollama.call('When I say ping you say pong: ping')
+  return Boolean(res)
 }
 
 export {
@@ -85,5 +79,5 @@ export {
   getRelevantFiles,
   getRelevantDocuments,
   getRelevantTopics,
-  wakeUpOllama,
+  warmUpModel,
 }

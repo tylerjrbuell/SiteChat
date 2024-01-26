@@ -9,11 +9,23 @@ const stream = async (model: string, prompt: string) => {
   const ollama = getOllamaClient(model)
   const stream = await ollama.stream(prompt, {
     signal: abortController.signal,
+    timeout: 300000,
   })
-  for await (const chunk of stream) {
-    self.postMessage({ chunk, webClientId: _webClientId, isStreaming: true })
+  try {
+    for await (const chunk of stream) {
+      // console.log('Sending chunk: ', chunk, _webClientId)
+      self.postMessage({ chunk, webClientId: _webClientId, isStreaming: true })
+    }
+    self.postMessage({ webClientId: _webClientId, isStreaming: false })
+  } catch (error: any) {
+    self.postMessage({
+      webClientId: _webClientId,
+      isStreaming: false,
+      error: {
+        message: error.message,
+      },
+    })
   }
-  self.postMessage({ webClientId: _webClientId, isStreaming: false })
 }
 
 self.onmessage = async (event: MessageEvent) => {

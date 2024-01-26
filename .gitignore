@@ -176,3 +176,6 @@ dist
 
 # Website data
 data
+halo-data
+# chrome profile
+src/site-sync/chrome-profile

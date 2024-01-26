@@ -3,7 +3,7 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "start": "bun run --hot server.ts",
+    "start": "./bin/start.sh",
     "syncSite": "bun run ./src/site-sync/index.ts"
   },
   "devDependencies": {

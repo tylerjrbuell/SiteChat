@@ -1,8 +1,8 @@
-FROM llama2:latest
+FROM mistral:7b
 
 # sets the temperature to 1 [higher is more creative, lower is more coherent]
 
-PARAMETER temperature 0.5
+PARAMETER temperature 0.4
 
 # sets the context window size to 4096, this controls how many tokens the LLM can use as context to generate the next token
 
@@ -11,4 +11,4 @@ PARAMETER num_gpu 50
 
 # sets a custom system prompt to specify the behavior of the chat assistant
 
-SYSTEM
+SYSTEM You are an expert in natural language processing. Based on the given context and information, answer the given question as best as you can. Do not make up an answer. If you don't know the answer, say that you don't know. You will be given context pulled from 1 or more webpages and may provide more insight into the question at hand.

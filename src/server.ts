@@ -12,7 +12,7 @@ import { inferenceWorker } from './inference'
 import { websocketEvents } from './websockets'
 
 const uuid = require('uuid')
-const OLLAMA_MODEL = 'llama2:latest'
+const OLLAMA_MODEL = 'siteChat:latest'
 const EMBEDDING_MODEL = 'Craig/paraphrase-MiniLM-L6-v2'
 const DATA_DIRECTORY = './data'
 const embeddings = await getHuggingFaceInferenceEmbeddings(EMBEDDING_MODEL)
@@ -20,8 +20,9 @@ const embeddings = await getHuggingFaceInferenceEmbeddings(EMBEDDING_MODEL)
 try {
   await verifyModel(OLLAMA_MODEL)
   const docStore = await loadDataDirectory(DATA_DIRECTORY, embeddings, {
-    chunkSize: 800,
-    chunkOverlap: 100,
+    chunkSize: 1300,
+    chunkOverlap: 0,
+    embeddingChunkSize: 1000,
   })
   const fileStore = await loadSourceFiles(DATA_DIRECTORY, embeddings)
   const server = await Bun.serve({
@@ -40,6 +41,7 @@ try {
         question,
         contextFiles
       )
+      console.log('relevantFiles: ', relevantFiles);
       const relevantTopics = getRelevantTopics(relevantFiles)
       const relevantDocs = await getRelevantDocuments(
         docStore,

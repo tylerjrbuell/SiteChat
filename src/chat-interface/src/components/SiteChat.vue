@@ -2,7 +2,39 @@
   <div style="width: 600px">
     <q-banner class="bg-primary text-white" style="border-radius: 5px">
       <div class="row justify-between">
-        <div class="text-h6">Site Chat</div>
+        <div class="text-h6">
+          <q-input
+            dense
+            v-model="siteUrl"
+            color="accent"
+            icon="settings"
+            direction="right"
+            title="Site URL"
+            label="Context Site URL"
+            style="width: 530px"
+            :disable="siteLoadingProgress > 0"
+          >
+            <template v-slot:prepend>
+              <q-icon name="link" />
+            </template>
+            <template v-slot:append>
+              <q-icon
+                @click="ingesting ? abortIngestion() : startSiteUrlIngestion()"
+                v-if="isValidUrl(siteUrl) && siteLoadingProgress === 0"
+                color="accent"
+                size="md"
+                class="cursor-pointer"
+                :name="ingesting ? 'cancel' : 'download'"
+                title="Download Site Content"
+              />
+            </template>
+          </q-input>
+          <q-linear-progress
+            v-if="siteLoadingProgress > 0"
+            color="accent"
+            :value="siteLoadingProgress"
+          ></q-linear-progress>
+        </div>
         <q-fab
           flat
           vertical-actions-align="left"
@@ -46,11 +78,13 @@
       clearable
       autogrow
       type="textarea"
-      label="Ask a question"
+      :label="!webClientId ? 'Model is warming up...' : 'Ask a question'"
       @clear="
         answer = '';
         sourceLinks = [];
       "
+      :loading="!webClientId"
+      :disable="!webClientId"
     >
     </q-input>
     <q-input
@@ -92,14 +126,17 @@
       unelevated
       :title="loading ? 'Cancel' : 'Submit Question'"
       :icon="loading ? 'cancel' : 'send'"
+      :disable="!webClientId"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 
 const ws = new WebSocket(`ws://localhost:${process.env.DOCKER_PORT || 3000}`);
+const $q = useQuasar();
 const response = ref(null);
 const webClientId = ref('');
 const contextDocuments = ref(2);
@@ -110,20 +147,53 @@ const loading = ref(false);
 const streaming = ref(false);
 const streamEnded = ref(false);
 const sourceLinks = ref([]);
+const siteUrl = ref('');
+const ingesting = ref(false);
+const ingestResult = ref({});
+const siteLoadingProgress = ref(0.0);
+
+const isValidUrl = (url: string) => {
+  try {
+    new URL(url);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
 
 ws.onopen = async function () {
   console.log('Connected to site-chat-api');
 };
 
 ws.onmessage = function (event) {
-  const { chunk, clientId, isStreaming } = JSON.parse(event.data);
-  console.log('message for ' + clientId);
+  const {
+    chunk,
+    clientId,
+    isStreaming,
+    error,
+    ingesting: isIngesting,
+    syncResult
+  } = JSON.parse(event.data);
+  console.log('message  recieved: ', event.data);
   streaming.value = Boolean(isStreaming);
   if (clientId) {
     webClientId.value = clientId;
   }
   if (chunk) {
     answer.value = answer.value + chunk;
+  }
+  if (syncResult) {
+    ingestResult.value = syncResult;
+  }
+  ingesting.value = isIngesting;
+  if (error) {
+    loading.value = false;
+    $q.notify({
+      message: error.message,
+      color: 'red',
+      position: 'top',
+      icon: 'warning'
+    });
   }
 };
 
@@ -139,6 +209,30 @@ watch(streaming, (val) => {
     loading.value = false;
   }
 });
+
+watch(ingestResult, (result: any) => {
+  if (result.success) {
+    $q.notify({
+      message: result.message,
+      color: 'black',
+      position: 'top',
+      icon: 'check'
+    });
+  }
+});
+
+const startSiteUrlIngestion = () => {
+  ingesting.value = true;
+  ws.send(
+    JSON.stringify({ webClientId: webClientId.value, siteUrl: siteUrl.value })
+  );
+};
+
+const abortIngestion = () => {
+  console.log('abortIngestion');
+  ws.send(JSON.stringify({ abortIngest: true }));
+  ingesting.value = false;
+};
 
 /**
  * Makes an asynchronous request to http://localhost:3000 with a POST method
@@ -160,11 +254,11 @@ const ask = async (_question = '') => {
           webClientId: webClientId.value,
           question: _question || question.value,
           contextDocuments: contextDocuments.value,
-          contextFiles: contextFiles.value,
+          contextFiles: contextFiles.value
         }),
         headers: {
-          Connection: 'keep-alive',
-        },
+          Connection: 'keep-alive'
+        }
       }
     );
     const data = await response.json();
