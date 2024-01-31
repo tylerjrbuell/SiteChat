@@ -1,5 +1,5 @@
 <template>
-  <div style="width: 600px">
+  <div style="width: 850px">
     <q-banner class="bg-primary text-white" style="border-radius: 5px">
       <div class="row justify-between">
         <div class="text-h6">
@@ -11,7 +11,7 @@
             direction="right"
             title="Site URL"
             label="Context Site URL"
-            style="width: 530px"
+            style="width: 730px"
             :disable="siteLoadingProgress > 0"
           >
             <template v-slot:prepend>
@@ -87,41 +87,34 @@
       :disable="!webClientId"
     >
     </q-input>
-    <q-input
+    <q-scroll-area
+      dark
       ref="response"
-      :loading="loading"
-      v-model="answer"
-      type="textarea"
-      label="Response"
-      standout
-      clearable
-      autogrow
-      input-class="response-input"
-      :disable="!answer"
+      class="response-input text-white rounded-borders"
     >
-      <template #loading>
+      <template #default>
+        <div v-html="markdownAnswer" ref="markdownContainer"></div>
         <q-spinner-dots
-          v-if="loading && !streaming"
-          class="q-mb-md q-mt-md"
+          v-if="loading || streaming"
+          class="q-mb-md q-mt-xl row"
           color="primary"
-          size="xl"
-        />
-        <q-spinner-comment
-          v-if="streaming"
-          class="q-mb-md q-mt-md"
-          color="primary"
-          size="xl"
+          size="lg"
+          style="width: 100%"
         />
       </template>
-    </q-input>
-
-    <div v-if="sourceLinks.length && !loading">
+    </q-scroll-area>
+    <div class="relevant-sources" v-if="sourceLinks.length && !loading">
       <b>Relevant Sources:</b> <span v-html="sourceLinks.join(', ')"></span>
     </div>
     <q-btn
       @click="loading ? abortAsk() : ask()"
       :color="loading ? 'red' : 'accent'"
-      style="width: inherit; margin-left: 0px"
+      style="
+        margin-top: 0;
+        width: inherit;
+        margin-left: 0px;
+        border-radius: 0px 0px 5px 5px;
+      "
       :label="loading ? 'Cancel' : 'Submit Question'"
       unelevated
       :title="loading ? 'Cancel' : 'Submit Question'"
@@ -132,12 +125,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { useQuasar } from 'quasar';
+import { ref, watch, computed } from 'vue';
+import { useQuasar, copyToClipboard } from 'quasar';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/stackoverflow-dark.min.css';
 
 const ws = new WebSocket(`ws://localhost:${process.env.DOCKER_PORT || 3000}`);
 const $q = useQuasar();
 const response = ref(null);
+const markdownContainer: any = ref(null);
 const webClientId = ref('');
 const contextDocuments = ref(2);
 const contextFiles = ref(1);
@@ -151,6 +147,7 @@ const siteUrl = ref('');
 const ingesting = ref(false);
 const ingestResult = ref({});
 const siteLoadingProgress = ref(0.0);
+const copyIconName = ref('content_copy');
 
 const isValidUrl = (url: string) => {
   try {
@@ -174,8 +171,9 @@ ws.onmessage = function (event) {
     ingesting: isIngesting,
     syncResult
   } = JSON.parse(event.data);
-  console.log('message  recieved: ', event.data);
+  // console.log('message  recieved: ', event.data);
   streaming.value = Boolean(isStreaming);
+  ingesting.value = isIngesting;
   if (clientId) {
     webClientId.value = clientId;
   }
@@ -185,7 +183,6 @@ ws.onmessage = function (event) {
   if (syncResult) {
     ingestResult.value = syncResult;
   }
-  ingesting.value = isIngesting;
   if (error) {
     loading.value = false;
     $q.notify({
@@ -201,10 +198,28 @@ ws.onclose = function () {
   console.log('Disconnected from site-chat-api');
 };
 
+const markdownAnswer = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const markdown = marked.parse(answer.value);
+  return markdown;
+});
+
+const copyIconHtml = computed(() => {
+  return `<i
+      class="q-icon notranslate material-icons copy-icon"
+      aria-hidden="true"
+      role="presentation"
+      title="Copy to Clipboard"
+      >${copyIconName.value}</i
+    >`;
+});
+
 watch(streaming, (val) => {
   if (val == true) {
     streamEnded.value = false;
   } else if (val == false) {
+    enrichCodeBlocks();
     streamEnded.value = true;
     loading.value = false;
   }
@@ -220,6 +235,28 @@ watch(ingestResult, (result: any) => {
     });
   }
 });
+
+const enrichCodeBlocks = () => {
+  if (markdownContainer.value) {
+    const codeBlocks = markdownContainer.value.querySelectorAll('pre');
+    codeBlocks.forEach((codeBlock: any) => {
+      hljs.highlightElement(codeBlock);
+      const copyIcon = document.createElement('span');
+      copyIcon.className = 'copy-icon';
+      copyIcon.innerHTML = copyIconHtml.value;
+      copyIcon.addEventListener('click', async () => {
+        await copyToClipboard(codeBlock.innerText);
+        copyIconName.value = 'assignment_turned_in';
+        copyIcon.innerHTML = copyIconHtml.value;
+        setTimeout(() => {
+          copyIconName.value = 'content_copy';
+          copyIcon.innerHTML = copyIconHtml.value;
+        }, 2000);
+      });
+      codeBlock.parentNode.insertBefore(copyIcon, codeBlock);
+    });
+  }
+};
 
 const startSiteUrlIngestion = () => {
   ingesting.value = true;
@@ -277,7 +314,8 @@ const abortAsk = () => {
   ws.send(JSON.stringify({ abort: true }));
 };
 </script>
-<style>
+
+<style lang="scss">
 a,
 a:visited,
 a:hover,
@@ -288,8 +326,35 @@ a:active {
   display: none;
 }
 .response-input {
-  max-height: 300px !important;
-  min-height: 200px !important;
-  overflow: scroll !important;
+  height: 350px !important;
+  width: 850px !important;
+  padding-right: 10px;
+  padding-left: 5px;
+  padding-top: 5px;
+  background-color: #343541;
+  border-radius: 5px 5px 0px 0px;
+}
+:not(pre) > code {
+  color: orange;
+  border-radius: 5px;
+}
+pre {
+  padding: 10px;
+  background-color: black;
+  border-radius: 5px;
+}
+
+.relevant-sources {
+  background-color: #6d708c;
+}
+
+.copy-icon {
+  cursor: pointer;
+  font-size: 20px;
+  margin-right: 5px;
+  margin-top: 5px;
+  position: relative;
+  float: right;
+  color: white;
 }
 </style>

@@ -5,26 +5,19 @@ import {
   getRelevantDocuments,
   getRelevantTopics,
 } from './helpers'
-import { loadDataDirectory, loadSourceFiles } from './ingest'
 import { getHuggingFaceInferenceEmbeddings } from './embeddings'
 import { generatePrompt } from './prompt'
 import { inferenceWorker } from './inference'
 import { websocketEvents } from './websockets'
+import { getChroma } from './chromaDB'
 
 const uuid = require('uuid')
 const OLLAMA_MODEL = 'siteChat:latest'
 const EMBEDDING_MODEL = 'Craig/paraphrase-MiniLM-L6-v2'
-const DATA_DIRECTORY = './data'
 const embeddings = await getHuggingFaceInferenceEmbeddings(EMBEDDING_MODEL)
 
 try {
   await verifyModel(OLLAMA_MODEL)
-  const docStore = await loadDataDirectory(DATA_DIRECTORY, embeddings, {
-    chunkSize: 1300,
-    chunkOverlap: 0,
-    embeddingChunkSize: 1000,
-  })
-  const fileStore = await loadSourceFiles(DATA_DIRECTORY, embeddings)
   const server = await Bun.serve({
     port: 3000,
     async fetch(request, server) {
@@ -36,13 +29,18 @@ try {
       if (success) return
       const { webClientId, question, contextDocuments, contextFiles } =
         await request.json()
+      const fileStore = await getChroma(embeddings, {
+        collectionName: 'sourceFiles',
+      })
       const relevantFiles = await getRelevantFiles(
         fileStore,
         question,
         contextFiles
       )
-      console.log('relevantFiles: ', relevantFiles);
       const relevantTopics = getRelevantTopics(relevantFiles)
+      const docStore = await getChroma(embeddings, {
+        collectionName: 'sourceDocuments',
+      })
       const relevantDocs = await getRelevantDocuments(
         docStore,
         question,

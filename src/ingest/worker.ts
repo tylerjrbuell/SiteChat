@@ -1,6 +1,11 @@
 import syncSiteContent from '../site-sync'
 import { loadDataDirectory, loadSourceFiles } from '../ingest'
 import { getHuggingFaceInferenceEmbeddings } from '../embeddings'
+import { unlink } from "node:fs/promises";
+// @ts-ignore
+import { Glob } from "bun";
+
+
 let abortController: AbortController = new AbortController()
 let _webClientId: string
 declare var self: Worker
@@ -13,17 +18,18 @@ const embeddings = await getHuggingFaceInferenceEmbeddings(EMBEDDING_MODEL)
 const ingestSite = async (url: string) => {
   const webClientId = _webClientId
   console.log('starting stream worker for client: ', webClientId)
+  await clearDataDirectory()
   const result = await syncSiteContent(url, true, abortController.signal)
   try {
     if (result.success) {
       console.log(url.split('/').reverse().pop());
-      const docStore = await loadDataDirectory(DATA_DIRECTORY, embeddings, {
+      await loadDataDirectory(DATA_DIRECTORY, embeddings, {
         chunkSize: 1300,
         chunkOverlap: 0,
         embeddingChunkSize: 1000,
-        vectorCollectionName: url.replace('https://', '').split('/').reverse().pop(),
+        // vectorCollectionName: url.replace('https://', '').split('/').reverse().pop(),
       })
-      const fileStore = await loadSourceFiles(DATA_DIRECTORY, embeddings)
+      await loadSourceFiles(DATA_DIRECTORY, embeddings)
       self.postMessage({ webClientId, syncResult: result })
     } else {
       self.postMessage({
@@ -39,6 +45,14 @@ const ingestSite = async (url: string) => {
         message: error.message,
       },
     })
+  }
+}
+
+const clearDataDirectory = async () => {
+  const glob = await Glob('*.txt')
+  for await (const file of glob.scan(DATA_DIRECTORY)) {
+    console.log('clearing file: ', file);
+    await unlink(`${DATA_DIRECTORY}/${file}`);
   }
 }
 

@@ -1,9 +1,10 @@
 import { DirectoryLoader } from 'langchain/document_loaders/fs/directory'
+import { Document } from 'langchain/document'
 import { PDFLoader } from 'langchain/document_loaders/fs/pdf'
 import { TextLoader } from 'langchain/document_loaders/fs/text'
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter'
 import { Chroma } from 'langchain/vectorstores/chroma'
-import chromaClient from '../chromaDB'
+import { chromaClient, getChroma } from '../chromaDB'
 
 let _webClients: any = {}
 let workers: any = {}
@@ -34,11 +35,15 @@ const chunkedArray = (arr: any[], chunkSize: number) => {
   return res
 }
 
-interface directoryLoadOptions {
+interface DirectoryLoadOptions {
   vectorCollectionName?: string
-  chunkSize: number
-  chunkOverlap: number
-  embeddingChunkSize: number
+  chunkSize?: number
+  chunkOverlap?: number
+  embeddingChunkSize?: number
+}
+
+interface FileLoadOptions {
+  vectorCollectionName?: string
 }
 
 const getDirectoryLoader = (path: string) => {
@@ -51,72 +56,65 @@ const getDirectoryLoader = (path: string) => {
 async function loadDataDirectory(
   path: string = './data',
   embeddings: any,
-  options: directoryLoadOptions = {
+  options: Partial<DirectoryLoadOptions> = {}
+): Promise<Document<Record<string, any>>[]> {
+  const defaultOptions: DirectoryLoadOptions = {
     chunkSize: 1000,
     chunkOverlap: 200,
     embeddingChunkSize: 1000,
-  }
-): Promise<Chroma> {
-  let vectorStore: Chroma
-  const collectionName = options?.vectorCollectionName
-    ? options.vectorCollectionName
-    : 'dataSources'
-  // chromaClient.deleteCollection({ name: collectionName }).catch(() => { })
-  const collections = await chromaClient.listCollections()
-  // if (!collections?.map((c) => c.name).includes(collectionName)) {
+    vectorCollectionName: 'sourceDocuments',
+  };
+  options = { ...defaultOptions, ...options };
+  await chromaClient.reset()
+  const collectionName = options.vectorCollectionName
+  console.log(collectionName);
+  const documentStore: Chroma = await getChroma(embeddings, {
+    collectionName
+  })
   const loader = getDirectoryLoader(path)
-  console.log(`Loading and splitting documents from: ${path}...`)
   const docs = await loader.load()
-  if (!docs.length) {
-    throw new Error('Failed to load documents')
+  if (docs.length) {
+    console.log(`Loading and splitting documents from: ${path}...`)
+    const textSplitter = new RecursiveCharacterTextSplitter({
+      chunkSize: options.chunkSize,
+      chunkOverlap: options.chunkOverlap,
+    })
+    const splitDocs = await textSplitter.splitDocuments(docs)
+    let combinedChunks: any = []
+    console.log(`Embedding ${splitDocs.length} documents...`)
+    for (let docsChunk of chunkedArray(splitDocs, options.embeddingChunkSize!)) {
+      combinedChunks = combinedChunks.concat(docsChunk)
+    }
+    await documentStore.addDocuments(combinedChunks)
+    const collection = await chromaClient.getCollection({ name: collectionName! })
+    console.info(`${await collection.count()} Documents Embedded successfully to collection: ${collection.name}`);
   }
-  const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: options.chunkSize,
-    chunkOverlap: options.chunkOverlap,
-  })
-  const splitDocs = await textSplitter.splitDocuments(docs)
-  let combinedChunks: any = []
-  console.log(`Embedding ${splitDocs.length} documents...`)
-  for (let docsChunk of chunkedArray(splitDocs, options.embeddingChunkSize)) {
-    combinedChunks = combinedChunks.concat(docsChunk)
-  }
-  vectorStore = await Chroma.fromDocuments(combinedChunks, embeddings, {
-    collectionName: collectionName,
-    url: 'http://chromadb:8000',
-  })
-  // }
-  // vectorStore = await Chroma.fromExistingCollection(embeddings, {
-  //   collectionName: collectionName,
-  //   url: 'http://chromadb:8000',
-  // })
-  if (!vectorStore) {
-    throw new Error('Failed to load vector store collection')
-  }
-  return vectorStore
+  return docs
 }
 
 async function loadSourceFiles(
   path: string = './data',
-  embeddings: any
-): Promise<Chroma> {
-  console.log(`Loading source file names from ${path}...`)
-
+  embeddings: any,
+  options: FileLoadOptions = {
+    vectorCollectionName: 'sourceFiles',
+  }
+): Promise<Document<Record<string, any>>[]> {
   const loader = getDirectoryLoader(path)
   const docs = await loader.load()
-  if (!docs.length) {
-    throw new Error('No documents found in the specified directory')
+  if (docs.length) {
+    console.log(`Loading source file names from ${path}...`)
+    const collectionName = options.vectorCollectionName
+    const fileStore: Chroma = await getChroma(embeddings, {
+      collectionName
+    })
+    await Chroma.fromTexts(Array.from(new Set(docs.map((d) => d.metadata.source))), [], embeddings, {
+      url: fileStore.url,
+      collectionName
+    })
+    const collection = await chromaClient.getCollection({ name: collectionName! })
+    console.info(`${await collection.count()} File names Embedded successfully to collection: ${collection.name}`);
   }
-  const collectionName = 'sourceFiles'
-  const filesStore = await Chroma.fromTexts(
-    Array.from(new Set(docs.map((d) => d.metadata.source))),
-    {},
-    embeddings,
-    {
-      collectionName: collectionName,
-      url: 'http://chromadb:8000',
-    }
-  )
-  return filesStore
+  return docs
 }
 
 export {
