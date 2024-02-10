@@ -13,13 +13,17 @@ function setWebClients(webClients: any) {
   _webClients = webClients
 }
 
-function ingestWorker(siteUrl: string, webClientId: any) {
+function getWebClients() {
+  return _webClients
+}
+
+function ingestWorker(siteUrl: string, webClientId: any, singlePageIngest: boolean) {
   const worker = new Worker(new URL('worker.ts', import.meta.url).href)
-  worker.postMessage({ siteUrl, webClientId })
+  worker.postMessage({ siteUrl, webClientId, singlePageIngest })
   worker.onmessage = async (event: MessageEvent) => {
-    console.log('Received message from worker: ', event.data)
-    const { webClientId, error, syncResult } = event.data
-    _webClients[webClientId]?.send(JSON.stringify({ webClientId, error, syncResult, ingesting: false }))
+    // console.log('Received message from worker: ', event.data)
+    const { webClientId, error, syncResult, progress, ingesting } = event.data
+    _webClients[webClientId]?.send(JSON.stringify({ webClientId, error, syncResult, ingesting, progress }))
   }
   workers[webClientId] = worker
   // console.log('threadID: ', worker.threadId)
@@ -67,7 +71,6 @@ async function loadDataDirectory(
   options = { ...defaultOptions, ...options };
   await chromaClient.reset()
   const collectionName = options.vectorCollectionName
-  console.log(collectionName);
   const documentStore: Chroma = await getChroma(embeddings, {
     collectionName
   })
@@ -122,5 +125,6 @@ export {
   loadSourceFiles,
   ingestWorker,
   setWebClients,
+  getWebClients,
   workers,
 }

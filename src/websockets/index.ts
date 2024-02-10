@@ -21,7 +21,7 @@ const websocketEvents = {
     })
   },
   message: (ws: any, message: any) => {
-    const { abort, siteUrl, abortIngest } = JSON.parse(message)
+    const { abort, siteUrl, abortIngest, singlePageIngest } = JSON.parse(message)
     if (abort) {
       ws.send(
         JSON.stringify({ clientId: ws.data.clientId, isStreaming: false })
@@ -32,7 +32,7 @@ const websocketEvents = {
       ingestWorkers[ws.data.clientId].postMessage({ abort: true })
     }
     if (siteUrl) {
-      ingestWorker(siteUrl, ws.data.clientId)
+      ingestWorker(siteUrl, ws.data.clientId, singlePageIngest)
     }
   },
   close: (ws: any) => {

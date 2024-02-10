@@ -12,7 +12,6 @@
             title="Site URL"
             label="Context Site URL"
             style="width: 730px"
-            :disable="siteLoadingProgress > 0"
             :loading=ingesting
           >
             <template v-slot:prepend>
@@ -21,7 +20,7 @@
             <template v-slot:append>
               <q-icon
                 @click="ingesting ? abortIngestion() : startSiteUrlIngestion()"
-                v-if="isValidUrl(siteUrl) && siteLoadingProgress === 0"
+                v-if="isValidUrl(siteUrl)"
                 :color="ingesting ? 'red' : 'accent'"
                 size="md"
                 class="cursor-pointer"
@@ -32,6 +31,8 @@
           </q-input>
           <q-linear-progress
             v-if="siteLoadingProgress > 0"
+            class="q-pt-sm"
+            dark
             color="accent"
             :value="siteLoadingProgress"
           ></q-linear-progress>
@@ -67,6 +68,7 @@
               :rules="[(val) => val <= 5 || 'max of 5']"
               style="min-width: 120px; max-height: 50px"
             />
+            <q-checkbox v-model="singlePageIngest" style="color: black; font-size: 11px;" color="accent" dense label="Single Page Mode"></q-checkbox>
           </div>
         </q-fab>
       </div>
@@ -146,6 +148,7 @@ const streamEnded = ref(false);
 const sourceLinks = ref([]);
 const siteUrl = ref('');
 const ingesting = ref(false);
+const singlePageIngest = ref(true);
 const ingestResult = ref({});
 const siteLoadingProgress = ref(0.0);
 const copyIconName = ref('content_copy');
@@ -170,11 +173,12 @@ ws.onmessage = function (event) {
     isStreaming,
     error,
     ingesting: isIngesting,
-    syncResult
+    syncResult,
+    progress
   } = JSON.parse(event.data);
   // console.log('message  recieved: ', event.data);
   streaming.value = Boolean(isStreaming);
-  ingesting.value = isIngesting;
+
   if (clientId) {
     webClientId.value = clientId;
   }
@@ -183,6 +187,12 @@ ws.onmessage = function (event) {
   }
   if (syncResult) {
     ingestResult.value = syncResult;
+  }
+  if(isIngesting != undefined){
+    ingesting.value = isIngesting;
+  }
+  if(progress != undefined){
+    siteLoadingProgress.value = progress
   }
   if (error) {
     loading.value = false;
@@ -235,6 +245,10 @@ watch(ingestResult, (result: any) => {
       icon: 'check'
     });
   }
+  setTimeout(() => {
+    ingesting.value = false;
+    siteLoadingProgress.value = 0.0;
+  }, 2000);
 });
 
 const enrichCodeBlocks = () => {
@@ -262,7 +276,7 @@ const enrichCodeBlocks = () => {
 const startSiteUrlIngestion = () => {
   ingesting.value = true;
   ws.send(
-    JSON.stringify({ webClientId: webClientId.value, siteUrl: siteUrl.value })
+    JSON.stringify({ webClientId: webClientId.value, siteUrl: siteUrl.value, singlePageIngest: singlePageIngest.value })
   );
 };
 

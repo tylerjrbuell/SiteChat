@@ -4,6 +4,7 @@ const { existsSync } = require('fs')
 const { savePageText } = require('./helpers')
 const chrome = require('selenium-webdriver/chrome')
 const cliProgress = require('cli-progress')
+
 // create a new progress bar instance and use shades_classic theme
 const progressBar = new cliProgress.SingleBar(
   {},
@@ -14,6 +15,7 @@ const username = process.env.USERNAME
 const password = process.env.PASSWORD
 const dataDir = process.env.DATA_DIR
 async function syncSiteContent(siteUrl: string = '', singleUrl: boolean = true, abortSignal: AbortSignal) {
+ 
   const baseUrl = siteUrl || process.env.BASE_URL
   if (!existsSync(dataDir)) await mkdir(dataDir)
   const urls: Array<string> = []

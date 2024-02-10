@@ -13,7 +13,6 @@
     "build": "quasar build"
   },
   "dependencies": {
-    "@highlightjs/vue-plugin": "^2.1.0",
     "@quasar/extras": "^1.16.4",
     "highlight.js": "^11.9.0",
     "marked": "^11.2.0",
