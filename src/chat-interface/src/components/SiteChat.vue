@@ -13,6 +13,7 @@
             label="Context Site URL"
             style="width: 730px"
             :disable="siteLoadingProgress > 0"
+            :loading=ingesting
           >
             <template v-slot:prepend>
               <q-icon name="link" />
@@ -21,11 +22,11 @@
               <q-icon
                 @click="ingesting ? abortIngestion() : startSiteUrlIngestion()"
                 v-if="isValidUrl(siteUrl) && siteLoadingProgress === 0"
-                color="accent"
+                :color="ingesting ? 'red' : 'accent'"
                 size="md"
                 class="cursor-pointer"
                 :name="ingesting ? 'cancel' : 'download'"
-                title="Download Site Content"
+                :title="ingesting ? 'Cancel Site Ingestion' : 'Ingest Site Contents'"
               />
             </template>
           </q-input>
@@ -328,9 +329,9 @@ a:active {
 .response-input {
   height: 350px !important;
   width: 850px !important;
-  padding-right: 10px;
-  padding-left: 5px;
-  padding-top: 5px;
+  padding-right: 20px;
+  padding-left: 20px;
+  padding-top: 15px;
   background-color: #343541;
   border-radius: 5px 5px 0px 0px;
 }
